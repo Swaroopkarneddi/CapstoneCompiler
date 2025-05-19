@@ -41,11 +41,12 @@ app.get("/", (req, res) => {
 
 app.post("/ask_gemini/segrigate", async (req, res) => {
   const { data } = req.body;
+  console.log(data);
 
   if (!data) {
     return res.status(400).json({ error: "Prompt is required" });
   }
-
+  // Return the output in a single line with no line breaks.
   // const prompt = `**important return only the lists like this format list1=[.....]; list2=[.......] **dont return explanation ,**dont keep other signs only give in the desired format ,segrigate the given topics into two lists  compitativve coding related topics and other  ${data} and return only the list1 , list2`;
   const prompt = `
   You are required to return only two lists in the **exact** format:
@@ -89,6 +90,99 @@ app.post("/ask_gemini/segrigate", async (req, res) => {
     res.json({ codingTopicsList, otherTopicsList });
   } catch (error) {
     console.error("Gemini API Error:", error);
+    res.status(500).json({ error: "Failed to get response from Gemini" });
+  }
+});
+
+function normaliseSkillLevels(raw) {
+  // 1️⃣ Strip ```json … ``` or ``` … ``` fences if present
+  const cleaned = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "") // opening fence
+    .replace(/\s*```$/i, ""); // closing fence
+
+  // 2️⃣ Parse to JS
+  const parsed = JSON.parse(cleaned); // will be an array of 3 objects
+
+  // 3️⃣ Colour map
+  const colours = {
+    Advanced: "#ff5252", // red
+    Intermediate: "#f5c842", // amber
+    Fundamental: "#44d88d", // green
+  };
+
+  // 4️⃣ Transform
+  return parsed.map((obj) => {
+    // each obj has exactly one key (the level)
+    const level = Object.keys(obj)[0];
+    return {
+      level,
+      color: colours[level],
+      groups: obj[level], // already sorted by count desc
+    };
+  });
+}
+
+app.post("/ask_gemini/ClasifySkills", async (req, res) => {
+  const { data } = req.body;
+
+  if (!data) {
+    return res.status(400).json({ error: "Prompt is required" });
+  }
+
+  const prompt = String.raw`
+You are a JSON‑only formatter.
+
+############  INPUT  ############
+A single JSON object whose keys are skill names and whose values are
+positive integers (frequencies), e.g.:
+
+${JSON.stringify(data, null, 2)}
+
+############  TASK  ############
+1. Put every skill into exactly one of three levels:
+   • Advanced
+   • Intermediate
+   • Fundamental
+2. Build an **array (length = 3)** of level objects **in this exact order**:
+   a) Advanced   b) Intermediate   c) Fundamental  
+   Each level object MUST have **one key only** – the level name – whose
+   value is an **array of { name (string), count (number) }** items.
+3. Within each level array, sort items by **count descending**.
+4. **Return valid JSON ONLY.** No markdown, no explanation, no extra keys.
+
+############  OUTPUT SCHEMA ############
+[
+  {
+    "Advanced": [
+      { "name": "","count":  },
+      .....
+    ]
+  },
+  {
+    "Intermediate": [
+      { "name": "","count":  },....
+    ]
+  },
+  {
+    "Fundamental": [
+      { "name": "","count":   }
+    ]
+  }
+]
+
+############  CRITICAL RULE ############
+You MUST output **exactly** one JSON value that validates against the
+schema above — no surrounding text, comments, code fences or whitespace before/after.
+`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const raw = result.response.text(); // may contain ```json fences
+    const payload = normaliseSkillLevels(raw); // ← convert to final form
+    res.json({ levels: payload });
+  } catch (err) {
+    console.error("Gemini API Error:", err);
     res.status(500).json({ error: "Failed to get response from Gemini" });
   }
 });
