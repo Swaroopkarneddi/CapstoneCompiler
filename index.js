@@ -187,6 +187,57 @@ schema above — no surrounding text, comments, code fences or whitespace before
   }
 });
 
+app.post("/ask_gemini/whatToDoNext", async (req, res) => {
+  const { data } = req.body;
+
+  if (!data) {
+    return res.status(400).json({ error: "Prompt (code) is required" });
+  }
+
+  const prompt = `
+You are a senior software engineer. A developer has submitted the following code (either finished or unfinished):
+
+\`\`\`
+${data}
+\`\`\`
+
+Your task is to carefully analyze this code and suggest what the developer should do next to improve, complete, or test the code.
+
+Return the response **strictly** as a **JSON array of strings**, where each string is a suggestion or next step.
+
+Examples:
+[
+  "Add input validation",
+  "Write unit tests for edge cases"
+]
+
+Do not include any explanation or markdown around the JSON. If you must use markdown, wrap it in \`\`\`json\`\`\` only.
+`;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const raw = result.response.text();
+
+    let suggestions;
+    try {
+      // Remove Markdown code block if present
+      const cleaned = raw.replace(/^```json\s*|\s*```$/g, "").trim();
+      suggestions = JSON.parse(cleaned);
+    } catch (e) {
+      return res
+        .status(500)
+        .json({ error: "Invalid response format from Gemini", raw });
+    }
+
+    res.json({ suggestions });
+  } catch (err) {
+    console.error("Gemini API Error:", err);
+    res.status(500).json({ error: "Failed to get response from Gemini" });
+  }
+});
+
+// Route to execute code
+
 app.post("/run_single", async (req, res) => {
   const { language = "cpp", code, input = "" } = req.body;
 
