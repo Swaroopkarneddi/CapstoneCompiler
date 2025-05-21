@@ -178,8 +178,8 @@ schema above — no surrounding text, comments, code fences or whitespace before
 
   try {
     const result = await model.generateContent(prompt);
-    const raw = result.response.text(); // may contain ```json fences
-    const payload = normaliseSkillLevels(raw); // ← convert to final form
+    const raw = result.response.text();
+    const payload = normaliseSkillLevels(raw);
     res.json({ levels: payload });
   } catch (err) {
     console.error("Gemini API Error:", err);
