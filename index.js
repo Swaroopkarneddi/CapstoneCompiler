@@ -246,8 +246,11 @@ app.post("/run_single", async (req, res) => {
   }
 
   try {
+    console.log("1");
     const filePath = await generateFile(language, code);
+    console.log("2");
     const output = await executeCode(filePath, input, language);
+    console.log("3");
     res.json({ message: "Code executed successfully", language, output });
   } catch (error) {
     console.error(error);
